@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const { data: game } = await supabase
     .from("games")
-    .select("id, current_round_number")
+    .select("id, current_round_number, timer_enabled, ends_at, game_result")
     .eq("id", player.game_id)
     .single();
 
@@ -57,6 +57,31 @@ export async function GET(req: NextRequest) {
         .single()
     : { data: null };
 
+  let currentScreen = screenState?.current_screen ?? "waiting";
+  let gameResult = game?.game_result ?? "playing";
+
+  const timerEnabled = Boolean(game?.timer_enabled);
+  const endsAt = game?.ends_at ?? null;
+
+  const isTimeUp =
+    timerEnabled &&
+    endsAt &&
+    gameResult === "playing" &&
+    new Date().getTime() >= new Date(endsAt).getTime();
+
+  if (isTimeUp) {
+    gameResult = "lost";
+    currentScreen = "time_up";
+
+    await supabase
+      .from("games")
+      .update({
+        game_result: "lost",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", player.game_id);
+  }
+
   await supabase
     .from("player_screen_state")
     .update({
@@ -70,10 +95,13 @@ export async function GET(req: NextRequest) {
     playerName: player.display_name,
     roundNumber: round?.round_number ?? 1,
     roundTitle: round?.title ?? "",
-    currentScreen: screenState?.current_screen ?? "waiting",
+    currentScreen,
     color: assignment?.color ?? null,
     introText: round?.intro_text ?? null,
     successText: solution?.success_text ?? null,
     nextHint: solution?.next_hint ?? null,
+    timerEnabled,
+    endsAt,
+    gameResult,
   });
 }

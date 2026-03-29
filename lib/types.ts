@@ -7,7 +7,10 @@ export type PlayerScreen =
   | "solve_clue"
   | "enter_final_code"
   | "correct"
-  | "finished";
+  | "finished"
+  | "time_up";
+
+export type GameResult = "playing" | "won" | "lost";
 
 export type PlayerStateResponse = {
   playerId: string;
@@ -19,4 +22,8 @@ export type PlayerStateResponse = {
   introText: string | null;
   successText: string | null;
   nextHint: string | null;
+
+  timerEnabled: boolean;
+  endsAt: string | null;
+  gameResult: GameResult;
 };

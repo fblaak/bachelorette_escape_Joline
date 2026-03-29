@@ -10,6 +10,8 @@ import {
   PartyPopper,
   Lock,
   CheckCircle,
+  Clock3,
+  TimerOff,
 } from "lucide-react";
 
 type Theme = {
@@ -101,10 +103,27 @@ function getColorLabel(color?: string | null) {
   return COLOR_LABELS[color.toLowerCase()] ?? color;
 }
 
+function formatTimeLeft(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export default function PlayPage() {
   const [state, setState] = useState<PlayerStateResponse | null>(null);
   const [error, setError] = useState("");
   const [code, setCode] = useState("");
+  const [now, setNow] = useState(Date.now());
+  const [frozenTimeLeftMs, setFrozenTimeLeftMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const playerId = localStorage.getItem("playerId");
@@ -181,18 +200,62 @@ export default function PlayPage() {
     return DEFAULT_THEME;
   }, [state?.color, state?.currentScreen]);
 
+  const liveTimeLeftMs = useMemo(() => {
+    if (!state?.timerEnabled || !state?.endsAt) return null;
+    return new Date(state.endsAt).getTime() - now;
+  }, [state?.timerEnabled, state?.endsAt, now]);
+
+  useEffect(() => {
+    if (!state?.timerEnabled) {
+      setFrozenTimeLeftMs(null);
+      return;
+    }
+
+    if (state.gameResult === "playing" && liveTimeLeftMs !== null) {
+      setFrozenTimeLeftMs(Math.max(0, liveTimeLeftMs));
+    }
+  }, [state?.timerEnabled, state?.gameResult, liveTimeLeftMs]);
+
+  const timeLeftMs =
+    state?.gameResult === "won"
+      ? frozenTimeLeftMs
+      : liveTimeLeftMs;
+
+  const timerExpired =
+    state?.timerEnabled &&
+    state?.gameResult === "playing" &&
+    liveTimeLeftMs !== null &&
+    liveTimeLeftMs <= 0;
+
+  const effectiveScreen =
+    state?.gameResult === "lost" || timerExpired
+      ? "time_up"
+      : state?.currentScreen;
+
+  const timerTone =
+    timeLeftMs === null
+      ? ""
+      : timeLeftMs <= 5 * 60 * 1000
+      ? "text-red-600"
+      : timeLeftMs <= 10 * 60 * 1000
+      ? "text-orange-500"
+      : "text-zinc-800";
+      <p className={`mt-2 text-3xl font-black tracking-wide ${timerTone}`}>
+        className={`${timerTone} drop-shadow-sm`}
+      </p>
+      
   if (!state) {
     return (
       <main
-        className={`min-h-screen ${theme.page} ${theme.text} flex items-center justify-center p-6`}
+        className={`min-h-screen ${DEFAULT_THEME.page} ${DEFAULT_THEME.text} flex items-center justify-center p-6`}
       >
         <div
-          className={`w-full max-w-sm rounded-[32px] border ${theme.card} px-8 py-8 text-center shadow-2xl backdrop-blur`}
+          className={`w-full max-w-sm rounded-[32px] border ${DEFAULT_THEME.card} px-8 py-8 text-center shadow-2xl backdrop-blur`}
         >
           <div
-            className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/40 ring-8 ${theme.accentRing}`}
+            className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/40 ring-8 ${DEFAULT_THEME.accentRing}`}
           >
-            <Hourglass className={`h-8 w-8 ${theme.icon}`} />
+            <Hourglass className={`h-8 w-8 ${DEFAULT_THEME.icon}`} />
           </div>
           <p className="text-lg font-semibold">Laden...</p>
         </div>
@@ -216,8 +279,24 @@ export default function PlayPage() {
             {state.roundTitle || "Escape Route"}
           </h1>
 
+          {state.timerEnabled && timeLeftMs !== null ? (
+            <div
+              className={`mt-5 rounded-[24px] border ${theme.subtleCard} px-4 py-3 shadow-md`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Clock3 className={`h-5 w-5 ${theme.icon}`} />
+                <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${theme.mutedText}`}>
+                  Resterende tijd
+                </p>
+              </div>
+              <p className={`mt-2 text-3xl font-black ${timerTone}`}>
+                {formatTimeLeft(timeLeftMs ?? 0)}
+              </p>
+            </div>
+          ) : null}
+
           <div className="mt-8">
-            {state.currentScreen === "waiting" && (
+            {effectiveScreen === "waiting" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
@@ -230,7 +309,7 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "gather" && (
+            {effectiveScreen === "gather" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
@@ -241,7 +320,7 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "show_color" && (
+            {effectiveScreen === "show_color" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/28 ring-8 ${theme.accentRing}`}
@@ -263,7 +342,7 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "solve_clue" && (
+            {effectiveScreen === "solve_clue" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/28 ring-8 ${theme.accentRing}`}
@@ -285,7 +364,7 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "enter_final_code" && (
+            {effectiveScreen === "enter_final_code" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
@@ -298,21 +377,25 @@ export default function PlayPage() {
                   Voer de gezamenlijke 4-cijfercode in.
                 </p>
 
-                <input
-                  className={`w-full rounded-2xl border ${theme.input} p-4 text-center text-3xl font-bold shadow-md outline-none transition`}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  maxLength={4}
-                  inputMode="numeric"
-                  placeholder="1234"
-                />
+                {state.gameResult === "playing" ? (
+                  <>
+                    <input
+                      className={`w-full rounded-2xl border ${theme.input} p-4 text-center text-3xl font-bold shadow-md outline-none transition`}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      maxLength={4}
+                      inputMode="numeric"
+                      placeholder="1234"
+                    />
 
-                <button
-                  className={`w-full rounded-2xl px-5 py-4 text-lg font-semibold shadow-md transition ${theme.button}`}
-                  onClick={submitFinalCode}
-                >
-                  Controleer code
-                </button>
+                    <button
+                      className={`w-full rounded-2xl px-5 py-4 text-lg font-semibold shadow-md transition ${theme.button}`}
+                      onClick={submitFinalCode}
+                    >
+                      Controleer code
+                    </button>
+                  </>
+                ) : null}
 
                 {error ? (
                   <div className="rounded-[28px] border-2 border-red-300 bg-white/95 px-4 py-4 text-center shadow-lg">
@@ -327,12 +410,14 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "correct" && (
+            {effectiveScreen === "correct" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
                 >
-                  <CheckCircle className={`h-16 w-16 ${theme.icon} animate-bounce`} />
+                  <CheckCircle
+                    className={`h-16 w-16 ${theme.icon} animate-bounce`}
+                  />
                 </div>
 
                 {state.successText ? (
@@ -358,7 +443,7 @@ export default function PlayPage() {
               </div>
             )}
 
-            {state.currentScreen === "finished" && (
+            {effectiveScreen === "finished" && (
               <div className="space-y-5">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
@@ -371,6 +456,21 @@ export default function PlayPage() {
                 </p>
                 <p className={`text-base leading-7 ${theme.mutedText}`}>
                   Tijd om te proosten op de bride-to-be!
+                </p>
+              </div>
+            )}
+
+            {effectiveScreen === "time_up" && (
+              <div className="space-y-5">
+                <div
+                  className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
+                >
+                  <TimerOff className="h-12 w-12 text-red-500" />
+                </div>
+
+                <p className="text-3xl font-extrabold">De tijd is op</p>
+                <p className={`text-base leading-7 ${theme.mutedText}`}>
+                  Jullie hebben het helaas niet op tijd gehaald.
                 </p>
               </div>
             )}

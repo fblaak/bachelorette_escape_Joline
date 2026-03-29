@@ -111,6 +111,7 @@ export default function AdminPage() {
   const [successText, setSuccessText] = useState("");
   const [nextHint, setNextHint] = useState("");
   const [clues, setClues] = useState<Clue[]>(DEFAULT_CLUES);
+  const [timerMinutes, setTimerMinutes] = useState(60);
 
   const selectedRoundAssignments = useMemo(() => {
     if (!data) return [];
@@ -350,6 +351,66 @@ export default function AdminPage() {
     }
   }
 
+  async function setTimer(minutes: number) {
+  if (!data) {
+    setStatusMessage("Laad eerst de admin-data");
+    return;
+  }
+  if (!requirePin()) return;
+
+  setIsLoading(true);
+  setStatusMessage(`Timer instellen op ${minutes} minuten...`);
+
+  try {
+    await postJson("/api/admin/set-timer", {
+      adminPin: adminPin.trim(),
+      gameId: data.game.id,
+      minutes,
+    });
+
+    setStatusMessage(`Timer gestart op ${minutes} minuten`);
+    await load();
+  } catch (error) {
+    console.error(error);
+    setStatusMessage(
+      `FOUT: ${
+        error instanceof Error ? error.message : "timer instellen mislukt"
+      }`
+    );
+  } finally {
+    setIsLoading(false);
+  }
+}
+
+  async function resetTimer() {
+    if (!data) {
+      setStatusMessage("Laad eerst de admin-data");
+      return;
+    }
+    if (!requirePin()) return;
+
+    setIsLoading(true);
+    setStatusMessage("Timer resetten...");
+
+    try {
+      await postJson("/api/admin/set-timer", {
+        adminPin: adminPin.trim(),
+        gameId: data.game.id,
+        minutes: null,
+      });
+
+      setStatusMessage("Timer gereset");
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(
+        `FOUT: ${error instanceof Error ? error.message : "timer reset mislukt"}`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function updateClue(
     index: number,
     key: "digit" | "clue_text" | "envelope_number",
@@ -525,6 +586,39 @@ export default function AdminPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-rose-100 bg-white p-6 shadow-lg shadow-rose-100/50">
+              <h2 className="text-2xl font-semibold text-rose-950">Speltimer</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Start een aftellende klok voor het hele spel.
+              </p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <input
+                  className="w-28 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3 outline-none focus:border-rose-400 focus:bg-white"
+                  type="number"
+                  min={1}
+                  value={timerMinutes}
+                  onChange={(e) => setTimerMinutes(Number(e.target.value) || 1)}
+                />
+
+                <button
+                  className="rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 px-4 py-3 font-semibold text-white shadow-md transition hover:scale-[1.01] disabled:opacity-50"
+                  onClick={() => setTimer(timerMinutes)}
+                  disabled={isLoading}
+                >
+                  Start timer
+                </button>
+
+                <button
+                  className="rounded-2xl border border-rose-200 px-4 py-3 font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                  onClick={resetTimer}
+                  disabled={isLoading}
+                >
+                  Reset timer
+                </button>
               </div>
             </section>
 
