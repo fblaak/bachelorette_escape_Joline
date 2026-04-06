@@ -5,6 +5,7 @@ export async function POST(req: NextRequest) {
   try {
     const { playerId, sessionId, code } = await req.json();
     const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
 
     const { data: player } = await supabase
       .from("players")
@@ -18,7 +19,9 @@ export async function POST(req: NextRequest) {
 
     const { data: game } = await supabase
       .from("games")
-      .select("current_round_number, timer_enabled, ends_at, game_result")
+      .select(
+        "current_round_number, timer_enabled, ends_at, game_result, final_code_status"
+      )
       .eq("id", player.game_id)
       .single();
 
@@ -36,14 +39,13 @@ export async function POST(req: NextRequest) {
         .from("games")
         .update({
           game_result: "lost",
-          updated_at: new Date().toISOString(),
+          final_code_status: "wrong",
+          final_code_updated_at: now,
+          updated_at: now,
         })
         .eq("id", player.game_id);
 
-      return NextResponse.json(
-        { error: "De tijd is op" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "De tijd is op" }, { status: 400 });
     }
 
     if (game.game_result === "won") {
@@ -84,7 +86,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const { data: rounds } = await supabase
+      .from("rounds")
+      .select("round_number")
+      .eq("game_id", player.game_id);
+
+    const totalRounds = rounds?.length
+      ? Math.max(...rounds.map((r) => r.round_number))
+      : game.current_round_number;
+
+    const isLastRound = game.current_round_number >= totalRounds;
+
     const normalizedInput = String(code ?? "").trim();
+
+    await supabase
+      .from("games")
+      .update({
+        final_code_status: "submitting",
+        final_code_updated_at: now,
+        updated_at: now,
+      })
+      .eq("id", player.game_id);
+
     const isCorrect = normalizedInput === solution.final_code;
 
     await supabase.from("round_final_submissions").insert({
@@ -95,13 +118,24 @@ export async function POST(req: NextRequest) {
     });
 
     if (!isCorrect) {
+      await supabase
+        .from("games")
+        .update({
+          final_code_status: "wrong",
+          final_code_updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", player.game_id);
+
       return NextResponse.json({ error: "Code klopt niet" }, { status: 400 });
     }
 
     await supabase
       .from("games")
       .update({
-        game_result: "won",
+        game_result: isLastRound ? "won" : "playing",
+        final_code_status: "correct",
+        final_code_updated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", player.game_id);
@@ -112,17 +146,19 @@ export async function POST(req: NextRequest) {
       .eq("game_id", player.game_id)
       .eq("active", true);
 
+    const nextScreen = isLastRound ? "finished" : "correct";
+
     if (players?.length) {
       await supabase.from("player_screen_state").upsert(
         players.map((p) => ({
           player_id: p.id,
-          current_screen: "correct",
+          current_screen: nextScreen,
           updated_at: new Date().toISOString(),
         }))
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, isLastRound, nextScreen });
   } catch (error) {
     console.error("submit-final-code error", error);
     return NextResponse.json(

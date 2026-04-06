@@ -9,8 +9,13 @@ export type PlayerScreen =
   | "correct"
   | "finished"
   | "time_up";
+  | "paused"; 
 
 export type GameResult = "playing" | "won" | "lost";
+
+export type FinalCodeStatus = "idle" | "submitting" | "wrong" | "correct";
+
+export type GameStatus = "setup" | "running" | "paused" | "finished";
 
 export type PlayerStateResponse = {
   playerId: string;
@@ -22,8 +27,10 @@ export type PlayerStateResponse = {
   introText: string | null;
   successText: string | null;
   nextHint: string | null;
-
   timerEnabled: boolean;
   endsAt: string | null;
   gameResult: GameResult;
+  finalCodeStatus: FinalCodeStatus;
+  finalCodeUpdatedAt: string | null;
+  gameStatus: GameStatus;
 };

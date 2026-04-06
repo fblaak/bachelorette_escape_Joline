@@ -1,0 +1,433 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+type BootstrapResponse = {
+  game: { id: string; current_round_number: number; name: string };
+  players: Array<{
+    id: string;
+    display_name: string;
+    is_checked_in: boolean;
+    active: boolean;
+  }>;
+  rounds: Array<{
+    id: string;
+    round_number: number;
+    title: string;
+    intro_text: string | null;
+    bride_color_lock?: string | null;
+  }>;
+  currentRound: {
+    id: string;
+    round_number: number;
+    title: string;
+    intro_text: string | null;
+    bride_color_lock?: string | null;
+  } | null;
+  assignments: Array<{
+    player_id: string;
+    color: string;
+    locked_by_admin: boolean;
+  }>;
+  clues: Array<{
+    color: string;
+    digit: number;
+    clue_text: string | null;
+    envelope_number: number | null;
+  }>;
+  solution: {
+    final_code: string;
+    success_text: string | null;
+    next_hint: string | null;
+  } | null;
+};
+
+export default function AdminSetupPage() {
+  const [adminPin, setAdminPin] = useState("");
+  const [data, setData] = useState<BootstrapResponse | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [roundNumber, setRoundNumber] = useState(1);
+  const [title, setTitle] = useState("");
+  const [introText, setIntroText] = useState("");
+  const [finalCode, setFinalCode] = useState("");
+  const [successText, setSuccessText] = useState("");
+  const [nextHint, setNextHint] = useState("");
+  const [brideColorLock, setBrideColorLock] = useState("");
+
+  const totalRounds = useMemo(() => {
+    if (!data?.rounds?.length) return roundNumber;
+    return Math.max(...data.rounds.map((r) => r.round_number), roundNumber);
+  }, [data, roundNumber]);
+
+  function requirePin() {
+    if (!adminPin.trim()) {
+      setStatusMessage("Vul eerst de admin pin in");
+      return false;
+    }
+    return true;
+  }
+
+  function fillFormFromBootstrap(json: BootstrapResponse) {
+    setData(json);
+    setRoundNumber(json.game.current_round_number || 1);
+    setTitle(json.currentRound?.title ?? "");
+    setIntroText(json.currentRound?.intro_text ?? "");
+    setFinalCode(json.solution?.final_code ?? "");
+    setSuccessText(json.solution?.success_text ?? "");
+    setNextHint(json.solution?.next_hint ?? "");
+    setBrideColorLock(json.currentRound?.bride_color_lock ?? "");
+  }
+
+  async function postJson(url: string, body: Record<string, unknown>) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let json: any = {};
+
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`Response van ${url} is geen geldige JSON`);
+    }
+
+    if (!res.ok) {
+      throw new Error(json.error ?? "onbekende fout");
+    }
+
+    return json;
+  }
+
+  async function load() {
+    if (!requirePin()) return;
+
+    setIsLoading(true);
+    setStatusMessage("Bezig met laden...");
+
+    try {
+      const json = await postJson("/api/admin/bootstrap", {
+        adminPin: adminPin.trim(),
+      });
+
+      fillFormFromBootstrap(json);
+      setStatusMessage("Setup-data geladen");
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(
+        `FOUT: ${error instanceof Error ? error.message : "bootstrap mislukt"}`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function loadSelectedRound() {
+    if (!data) {
+      setStatusMessage("Laad eerst de admin-data");
+      return;
+    }
+    if (!requirePin()) return;
+
+    setIsLoading(true);
+    setStatusMessage(`Bezig met ronde ${roundNumber} laden...`);
+
+    try {
+      const json = await postJson("/api/admin/load-round", {
+        adminPin: adminPin.trim(),
+        gameId: data.game.id,
+        roundNumber,
+      });
+
+      setTitle(json.round?.title ?? "");
+      setIntroText(json.round?.intro_text ?? "");
+      setFinalCode(json.solution?.final_code ?? "");
+      setSuccessText(json.solution?.success_text ?? "");
+      setNextHint(json.solution?.next_hint ?? "");
+      setBrideColorLock(json.round?.bride_color_lock ?? "");
+      setStatusMessage(`Ronde ${roundNumber} geladen`);
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(
+        `FOUT: ${
+          error instanceof Error
+            ? error.message
+            : "gekozen ronde laden mislukt"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function saveRoundConfig() {
+    if (!data) {
+      setStatusMessage("Laad eerst de admin-data");
+      return;
+    }
+    if (!requirePin()) return;
+
+    setIsLoading(true);
+    setStatusMessage("Rondeconfig opslaan...");
+
+    try {
+      await postJson("/api/admin/set-round-config", {
+        adminPin: adminPin.trim(),
+        gameId: data.game.id,
+        roundNumber,
+        title,
+        introText,
+        brideColorLock: brideColorLock || null,
+        solution: {
+          final_code: finalCode,
+          success_text: successText,
+          next_hint: nextHint,
+        },
+      });
+
+      setStatusMessage("Rondeconfig opgeslagen");
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(
+        `FOUT: ${
+          error instanceof Error ? error.message : "save round config mislukt"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-rose-50 via-pink-50 to-white px-4 py-6 text-zinc-800 sm:px-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <section className="rounded-[28px] border border-white/70 bg-white/80 p-6 shadow-xl shadow-rose-100 backdrop-blur">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="mb-2 inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-rose-700">
+                Bachelorette escape
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight text-rose-950 sm:text-4xl">
+                Admin setup
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-zinc-600 sm:text-base">
+                Gebruik deze pagina alleen voor de voorbereiding van rondes.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Link
+                href="/admin"
+                className="rounded-2xl border border-rose-200 px-4 py-3 font-medium text-rose-700 transition hover:bg-rose-50"
+              >
+                Terug
+              </Link>
+              <Link
+                href="/admin/live"
+                className="rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 px-4 py-3 font-semibold text-white shadow-md transition hover:scale-[1.01]"
+              >
+                Naar live
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-rose-100 bg-white p-6 shadow-lg shadow-rose-100/60">
+          <h2 className="text-xl font-semibold text-rose-950">Inloggen</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Gebruik je admin pin om de setup te laden.
+          </p>
+
+          <div className="mt-5 flex flex-col gap-3">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-zinc-700">
+                Admin pin
+              </span>
+              <input
+                className="rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                type="password"
+                inputMode="numeric"
+                placeholder="Voer admin pin in"
+                value={adminPin}
+                onChange={(e) => setAdminPin(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void load();
+                  }
+                }}
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              <button
+                className="rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 px-5 py-3 font-semibold text-white shadow-md transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={load}
+                disabled={isLoading}
+              >
+                {isLoading ? "Bezig..." : "Inloggen / laden"}
+              </button>
+
+              {data ? (
+                <button
+                  className="rounded-2xl border border-rose-200 px-5 py-3 font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                  onClick={() => {
+                    setData(null);
+                    setStatusMessage("Uitgelogd");
+                  }}
+                  disabled={isLoading}
+                >
+                  Uitloggen
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] bg-gradient-to-r from-rose-500 to-fuchsia-500 px-4 py-4 text-white shadow-lg">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/80">
+            Status
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            {statusMessage || "Nog geen actie uitgevoerd"}
+          </p>
+        </section>
+
+        {!data ? (
+          <section className="rounded-[28px] border border-dashed border-rose-200 bg-white p-6 text-zinc-600 shadow-sm">
+            Log eerst in met je admin pin om de rondes voor te bereiden.
+          </section>
+        ) : (
+          <>
+            <section className="rounded-[28px] border border-rose-100 bg-white p-6 shadow-lg shadow-rose-100/50">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold text-rose-950">Game</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Basisinformatie en ronde-overzicht.
+                  </p>
+                </div>
+                <span className="rounded-full bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-700">
+                  Ronde {roundNumber} / {totalRounds}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl bg-rose-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-rose-500">
+                    Naam
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-rose-950">
+                    {data.game.name}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-fuchsia-50 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-fuchsia-500">
+                    Game ID
+                  </p>
+                  <p className="mt-2 break-all text-sm font-semibold text-fuchsia-950">
+                    {data.game.id}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-rose-100 bg-white p-6 shadow-lg shadow-rose-100/50">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold text-rose-950">
+                    Rondeconfig
+                  </h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Maak of wijzig hier een ronde, los van de live spelleiding.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    className="w-28 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3 outline-none focus:border-rose-400 focus:bg-white"
+                    type="number"
+                    min={1}
+                    value={roundNumber}
+                    onChange={(e) => setRoundNumber(Number(e.target.value) || 1)}
+                  />
+                  <button
+                    className="rounded-2xl border border-rose-200 px-4 py-3 font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                    onClick={loadSelectedRound}
+                    disabled={isLoading}
+                  >
+                    Laad gekozen ronde
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4">
+                <input
+                  className="rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  placeholder="Ronde titel"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+
+                <textarea
+                  className="min-h-28 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  placeholder="Introtekst"
+                  value={introText}
+                  onChange={(e) => setIntroText(e.target.value)}
+                />
+
+                <select
+                  className="rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  value={brideColorLock}
+                  onChange={(e) => setBrideColorLock(e.target.value)}
+                >
+                  <option value="">Kleur bruid vrij laten</option>
+                  <option value="red">Rood</option>
+                  <option value="blue">Blauw</option>
+                  <option value="green">Groen</option>
+                  <option value="yellow">Geel</option>
+                </select>
+
+                <input
+                  className="rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  placeholder="Final code, bv 9742"
+                  value={finalCode}
+                  onChange={(e) => setFinalCode(e.target.value)}
+                />
+
+                <textarea
+                  className="min-h-24 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  placeholder="Success tekst"
+                  value={successText}
+                  onChange={(e) => setSuccessText(e.target.value)}
+                />
+
+                <textarea
+                  className="min-h-24 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 outline-none transition focus:border-rose-400 focus:bg-white"
+                  placeholder="Volgende hint"
+                  value={nextHint}
+                  onChange={(e) => setNextHint(e.target.value)}
+                />
+
+                <button
+                  className="rounded-2xl bg-gradient-to-r from-rose-500 to-fuchsia-500 px-5 py-3 font-semibold text-white shadow-md transition hover:scale-[1.01] disabled:opacity-50"
+                  onClick={saveRoundConfig}
+                  disabled={isLoading}
+                >
+                  Rondeconfig opslaan
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}

@@ -26,6 +26,33 @@ type Theme = {
   accentRing: string;
 };
 
+function FireworksBackground() {
+  const fireworks = [
+    { left: "14%", top: "20%", delay: "0s" },
+    { left: "34%", top: "12%", delay: "0.8s" },
+    { left: "56%", top: "24%", delay: "1.4s" },
+    { left: "78%", top: "16%", delay: "0.4s" },
+    { left: "22%", top: "44%", delay: "1.8s" },
+    { left: "68%", top: "42%", delay: "2.2s" },
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {fireworks.map((fw, index) => (
+        <div
+          key={index}
+          className="firework"
+          style={{
+            left: fw.left,
+            top: fw.top,
+            animationDelay: fw.delay,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 const TEAM_THEME: Record<string, Theme> = {
   red: {
     page: "bg-gradient-to-br from-red-300 via-red-400 to-rose-400",
@@ -116,6 +143,9 @@ export default function PlayPage() {
   const [code, setCode] = useState("");
   const [now, setNow] = useState(Date.now());
   const [frozenTimeLeftMs, setFrozenTimeLeftMs] = useState<number | null>(null);
+  const gameStatus = state?.gameStatus ?? "running";
+  const currentScreen = state?.currentScreen ?? "waiting";
+  const currentGameResult = state?.gameResult ?? "playing";
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -202,8 +232,13 @@ export default function PlayPage() {
 
   const liveTimeLeftMs = useMemo(() => {
     if (!state?.timerEnabled || !state?.endsAt) return null;
+
+    if (gameStatus === "paused") {
+      return frozenTimeLeftMs;
+    }
+
     return new Date(state.endsAt).getTime() - now;
-  }, [state?.timerEnabled, state?.endsAt, now]);
+  }, [state?.timerEnabled, state?.endsAt, now, gameStatus, frozenTimeLeftMs]);
 
   useEffect(() => {
     if (!state?.timerEnabled) {
@@ -211,15 +246,14 @@ export default function PlayPage() {
       return;
     }
 
-    if (state.gameResult === "playing" && liveTimeLeftMs !== null) {
+    if (
+      state.gameResult === "playing" &&
+      gameStatus !== "paused" &&
+      liveTimeLeftMs !== null
+    ) {
       setFrozenTimeLeftMs(Math.max(0, liveTimeLeftMs));
     }
-  }, [state?.timerEnabled, state?.gameResult, liveTimeLeftMs]);
-
-  const timeLeftMs =
-    state?.gameResult === "won"
-      ? frozenTimeLeftMs
-      : liveTimeLeftMs;
+  }, [state?.timerEnabled, state?.gameResult, liveTimeLeftMs, gameStatus]);
 
   const timerExpired =
     state?.timerEnabled &&
@@ -228,9 +262,18 @@ export default function PlayPage() {
     liveTimeLeftMs <= 0;
 
   const effectiveScreen =
-    state?.gameResult === "lost" || timerExpired
+    gameStatus === "paused"
+      ? "paused"
+      : state?.gameResult === "lost" || timerExpired
       ? "time_up"
       : state?.currentScreen;
+
+  const timeLeftMs =
+    state?.gameResult === "won"
+      ? frozenTimeLeftMs
+      : state?.gameResult === "lost" || timerExpired
+      ? 0
+      : liveTimeLeftMs;
 
   const timerTone =
     timeLeftMs === null
@@ -238,12 +281,20 @@ export default function PlayPage() {
       : timeLeftMs <= 5 * 60 * 1000
       ? "text-red-600"
       : timeLeftMs <= 10 * 60 * 1000
-      ? "text-orange-500"
+      ? "text-orange-600"
       : "text-zinc-800";
-      <p className={`mt-2 text-3xl font-black tracking-wide ${timerTone}`}>
-        className={`${timerTone} drop-shadow-sm`}
-      </p>
-      
+
+  const showGlobalSubmittingMessage =
+    effectiveScreen === "enter_final_code" &&
+    state.finalCodeStatus === "submitting";
+
+  const showGlobalWrongMessage =
+    effectiveScreen === "enter_final_code" &&
+    state.finalCodeStatus === "wrong" &&
+    !error;
+
+  const canEnterCode = effectiveScreen === "enter_final_code";
+
   if (!state) {
     return (
       <main
@@ -271,7 +322,9 @@ export default function PlayPage() {
         <div
           className={`rounded-[36px] border ${theme.card} p-6 text-center shadow-2xl backdrop-blur sm:p-8`}
         >
-          <p className={`text-xs uppercase tracking-[0.35em] ${theme.mutedText}`}>
+          <p
+            className={`text-xs uppercase tracking-[0.35em] ${theme.mutedText}`}
+          >
             Vrijgezellen escape
           </p>
 
@@ -285,12 +338,16 @@ export default function PlayPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Clock3 className={`h-5 w-5 ${theme.icon}`} />
-                <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${theme.mutedText}`}>
+                <p
+                  className={`text-sm font-semibold uppercase tracking-[0.2em] ${theme.mutedText}`}
+                >
                   Resterende tijd
                 </p>
               </div>
-              <p className={`mt-2 text-3xl font-black ${timerTone}`}>
-                {formatTimeLeft(timeLeftMs ?? 0)}
+              <p
+                className={`mt-2 text-3xl font-black tracking-wide ${timerTone} drop-shadow-sm`}
+              >
+                {formatTimeLeft(timeLeftMs)}
               </p>
             </div>
           ) : null}
@@ -316,7 +373,9 @@ export default function PlayPage() {
                 >
                   <Smartphone className={`h-10 w-10 ${theme.icon}`} />
                 </div>
-                <p className="text-3xl font-extrabold">Alle telefoons bij elkaar</p>
+                <p className="text-3xl font-extrabold">
+                  Alle telefoons bij elkaar
+                </p>
               </div>
             )}
 
@@ -365,7 +424,7 @@ export default function PlayPage() {
             )}
 
             {effectiveScreen === "enter_final_code" && (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div
                   className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
                 >
@@ -377,7 +436,27 @@ export default function PlayPage() {
                   Voer de gezamenlijke 4-cijfercode in.
                 </p>
 
-                {state.gameResult === "playing" ? (
+                {showGlobalSubmittingMessage ? (
+                  <div
+                    className={`rounded-2xl border ${theme.subtleCard} px-4 py-3`}
+                  >
+                    <p className={`text-sm font-semibold ${theme.mutedText}`}>
+                      Code wordt gecontroleerd...
+                    </p>
+                  </div>
+                ) : null}
+
+                {showGlobalWrongMessage ? (
+                  <div
+                    className={`rounded-2xl border ${theme.subtleCard} px-4 py-3`}
+                  >
+                    <p className="text-sm font-semibold text-red-600">
+                      Er is een foute code ingevoerd.
+                    </p>
+                  </div>
+                ) : null}
+
+                {canEnterCode ? (
                   <>
                     <input
                       className={`w-full rounded-2xl border ${theme.input} p-4 text-center text-3xl font-bold shadow-md outline-none transition`}
@@ -388,6 +467,14 @@ export default function PlayPage() {
                       placeholder="1234"
                     />
 
+                    <div className="min-h-[24px] flex items-center justify-center">
+                      {error ? (
+                        <p className="text-sm font-semibold text-red-700">
+                          ❌ {error}
+                        </p>
+                      ) : null}
+                    </div>
+
                     <button
                       className={`w-full rounded-2xl px-5 py-4 text-lg font-semibold shadow-md transition ${theme.button}`}
                       onClick={submitFinalCode}
@@ -395,17 +482,6 @@ export default function PlayPage() {
                       Controleer code
                     </button>
                   </>
-                ) : null}
-
-                {error ? (
-                  <div className="rounded-[28px] border-2 border-red-300 bg-white/95 px-4 py-4 text-center shadow-lg">
-                    <p className="text-xl font-extrabold text-red-700">
-                      ❌ Foute code
-                    </p>
-                    <p className="mt-2 text-base font-medium text-red-600">
-                      {error}
-                    </p>
-                  </div>
                 ) : null}
               </div>
             )}
@@ -444,19 +520,23 @@ export default function PlayPage() {
             )}
 
             {effectiveScreen === "finished" && (
-              <div className="space-y-5">
-                <div
-                  className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
-                >
-                  <PartyPopper className={`h-10 w-10 ${theme.icon}`} />
-                </div>
+              <div className="relative space-y-5">
+                <FireworksBackground />
 
-                <p className="text-3xl font-extrabold">
-                  Jullie hebben de route afgerond
-                </p>
-                <p className={`text-base leading-7 ${theme.mutedText}`}>
-                  Tijd om te proosten op de bride-to-be!
-                </p>
+                <div className="relative z-10 space-y-5">
+                  <div
+                    className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
+                  >
+                    <PartyPopper className={`h-10 w-10 ${theme.icon}`} />
+                  </div>
+
+                  <p className="text-3xl font-extrabold">
+                    Jullie hebben de route afgerond
+                  </p>
+                  <p className={`text-base leading-7 ${theme.mutedText}`}>
+                    Tijd om te proosten op de bride-to-be!
+                  </p>
+                </div>
               </div>
             )}
 
@@ -471,6 +551,20 @@ export default function PlayPage() {
                 <p className="text-3xl font-extrabold">De tijd is op</p>
                 <p className={`text-base leading-7 ${theme.mutedText}`}>
                   Jullie hebben het helaas niet op tijd gehaald.
+                </p>
+              </div>
+            )}
+            {effectiveScreen === "paused" && (
+              <div className="space-y-5">
+                <div
+                  className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/35 ring-8 ${theme.accentRing}`}
+                >
+                  <span className="text-4xl">⏸️</span>
+                </div>
+
+                <p className="text-3xl font-extrabold">Pauze</p>
+                <p className={`text-base leading-7 ${theme.mutedText}`}>
+                  Wacht even op de spelleiding
                 </p>
               </div>
             )}

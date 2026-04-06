@@ -24,3 +24,85 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes firework {
+  0% {
+    transform: scale(0.2) translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5) translateY(-40px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) translateY(-80px);
+    opacity: 0;
+  }
+}
+
+.animate-firework {
+  animation: firework 1.5s ease-out infinite;
+}
+
+.firework,
+.firework::before,
+.firework::after {
+  --firework-size: 0.45rem;
+  --final-size: 16rem;
+  --particle-size: 0.22rem;
+  --color1: #ffffff;
+  --color2: #fde047;
+  --color3: #f9a8d4;
+  --color4: #93c5fd;
+  --color5: #86efac;
+  --color6: #fca5a5;
+  --y: -30vh;
+  content: "";
+  position: absolute;
+  width: var(--firework-size);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: firework-burst 2.2s infinite;
+  background:
+    radial-gradient(circle, var(--color1) var(--particle-size), transparent 0) 50% 0%,
+    radial-gradient(circle, var(--color2) var(--particle-size), transparent 0) 100% 50%,
+    radial-gradient(circle, var(--color3) var(--particle-size), transparent 0) 50% 100%,
+    radial-gradient(circle, var(--color4) var(--particle-size), transparent 0) 0% 50%,
+    radial-gradient(circle, var(--color5) var(--particle-size), transparent 0) 80% 20%,
+    radial-gradient(circle, var(--color6) var(--particle-size), transparent 0) 20% 80%,
+    radial-gradient(circle, var(--color2) var(--particle-size), transparent 0) 20% 20%,
+    radial-gradient(circle, var(--color3) var(--particle-size), transparent 0) 80% 80%;
+  background-size: var(--final-size) var(--final-size);
+  background-repeat: no-repeat;
+  opacity: 0;
+}
+
+.firework::before {
+  transform: translate(-50%, -50%) rotate(25deg);
+}
+
+.firework::after {
+  transform: translate(-50%, -50%) rotate(-25deg);
+}
+
+@keyframes firework-burst {
+  0% {
+    opacity: 0;
+    width: 0.45rem;
+    box-shadow: 0 0 0 rgba(255,255,255,0);
+  }
+  10% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+    width: var(--final-size);
+    box-shadow: 0 0 30px rgba(255,255,255,0.2);
+  }
+  100% {
+    opacity: 0;
+    width: var(--final-size);
+    box-shadow: 0 0 0 rgba(255,255,255,0);
+  }
+}
