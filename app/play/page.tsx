@@ -143,9 +143,13 @@ export default function PlayPage() {
   const [code, setCode] = useState("");
   const [now, setNow] = useState(Date.now());
   const [frozenTimeLeftMs, setFrozenTimeLeftMs] = useState<number | null>(null);
-  const gameStatus = state?.gameStatus ?? "running";
-  const currentScreen = state?.currentScreen ?? "waiting";
+
   const currentGameResult = state?.gameResult ?? "playing";
+  const currentScreen = state?.currentScreen ?? "waiting";
+  const finalCodeStatus = state?.finalCodeStatus ?? "idle";
+  const timerEnabled = state?.timerEnabled ?? false;
+  const endsAt = state?.endsAt ?? null;
+  const gameStatus = state?.gameStatus ?? "running";
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -220,58 +224,57 @@ export default function PlayPage() {
   const theme = useMemo(() => {
     const color = state?.color?.toLowerCase?.() ?? "";
     const useTeamColor =
-      state?.currentScreen === "show_color" ||
-      state?.currentScreen === "solve_clue";
+      currentScreen === "show_color" || currentScreen === "solve_clue";
 
     if (useTeamColor) {
       return TEAM_THEME[color] ?? DEFAULT_THEME;
     }
 
     return DEFAULT_THEME;
-  }, [state?.color, state?.currentScreen]);
+  }, [state?.color, currentScreen]);
 
   const liveTimeLeftMs = useMemo(() => {
-    if (!state?.timerEnabled || !state?.endsAt) return null;
+    if (!timerEnabled || !endsAt) return null;
 
     if (gameStatus === "paused") {
       return frozenTimeLeftMs;
     }
 
-    return new Date(state.endsAt).getTime() - now;
-  }, [state?.timerEnabled, state?.endsAt, now, gameStatus, frozenTimeLeftMs]);
+    return new Date(endsAt).getTime() - now;
+  }, [timerEnabled, endsAt, now, gameStatus, frozenTimeLeftMs]);
 
   useEffect(() => {
-    if (!state?.timerEnabled) {
+    if (!timerEnabled) {
       setFrozenTimeLeftMs(null);
       return;
     }
 
     if (
-      state.gameResult === "playing" &&
+      currentGameResult === "playing" &&
       gameStatus !== "paused" &&
       liveTimeLeftMs !== null
     ) {
       setFrozenTimeLeftMs(Math.max(0, liveTimeLeftMs));
     }
-  }, [state?.timerEnabled, state?.gameResult, liveTimeLeftMs, gameStatus]);
+  }, [timerEnabled, currentGameResult, liveTimeLeftMs, gameStatus]);
 
   const timerExpired =
-    state?.timerEnabled &&
-    state?.gameResult === "playing" &&
+    timerEnabled &&
+    currentGameResult === "playing" &&
     liveTimeLeftMs !== null &&
     liveTimeLeftMs <= 0;
 
   const effectiveScreen =
     gameStatus === "paused"
       ? "paused"
-      : state?.gameResult === "lost" || timerExpired
+      : currentGameResult === "lost" || timerExpired
       ? "time_up"
-      : state?.currentScreen;
+      : currentScreen;
 
   const timeLeftMs =
-    state?.gameResult === "won"
+    currentGameResult === "won"
       ? frozenTimeLeftMs
-      : state?.gameResult === "lost" || timerExpired
+      : currentGameResult === "lost" || timerExpired
       ? 0
       : liveTimeLeftMs;
 
@@ -286,11 +289,11 @@ export default function PlayPage() {
 
   const showGlobalSubmittingMessage =
     effectiveScreen === "enter_final_code" &&
-    state.finalCodeStatus === "submitting";
+    finalCodeStatus === "submitting";
 
   const showGlobalWrongMessage =
     effectiveScreen === "enter_final_code" &&
-    state.finalCodeStatus === "wrong" &&
+    finalCodeStatus === "wrong" &&
     !error;
 
   const canEnterCode = effectiveScreen === "enter_final_code";
@@ -332,7 +335,7 @@ export default function PlayPage() {
             {state.roundTitle || "Escape Route"}
           </h1>
 
-          {state.timerEnabled && timeLeftMs !== null ? (
+          {timerEnabled && timeLeftMs !== null ? (
             <div
               className={`mt-5 rounded-[24px] border ${theme.subtleCard} px-4 py-3 shadow-md`}
             >
@@ -554,6 +557,7 @@ export default function PlayPage() {
                 </p>
               </div>
             )}
+
             {effectiveScreen === "paused" && (
               <div className="space-y-5">
                 <div
