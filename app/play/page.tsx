@@ -531,7 +531,7 @@ export default function PlayPage() {
                   </div>
 
                   <p className="text-3xl font-extrabold">
-                    Jullie hebben de route afgerond
+                    Jullie hebben de route afgerond!!
                   </p>
                   <p className={`text-base leading-7 ${theme.mutedText}`}>
                     Tijd om te proosten op de bride-to-be!
