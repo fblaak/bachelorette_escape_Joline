@@ -8,8 +8,8 @@ export type PlayerScreen =
   | "enter_final_code"
   | "correct"
   | "finished"
-  | "time_up";
-  | "paused"; 
+  | "time_up"
+  | "paused";
 
 export type GameResult = "playing" | "won" | "lost";
 
