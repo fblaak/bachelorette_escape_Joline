@@ -478,6 +478,38 @@ export default function AdminLivePage() {
     }
   }
 
+  async function logoutPlayer(playerId: string, playerName: string) {
+    if (!requirePin()) return;
+
+    const confirmed = window.confirm(
+      `Weet je zeker dat je ${playerName} wilt uitloggen?`
+    );
+
+    if (!confirmed) return;
+
+    setIsLoading(true);
+    setStatusMessage(`${playerName} uitloggen...`);
+
+    try {
+      await postJson("/api/admin/logout-player", {
+        adminPin: adminPin.trim(),
+        playerId,
+      });
+
+      await load();
+      setStatusMessage(`${playerName} is uitgelogd`);
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(
+        `FOUT: ${
+          error instanceof Error ? error.message : "speler uitloggen mislukt"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-rose-50 via-pink-50 to-white px-4 py-6 text-zinc-800 sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -794,6 +826,16 @@ export default function AdminLivePage() {
                           Actief: {player.active ? "ja" : "nee"}
                         </p>
                       </div>
+
+                      <button
+                        className="rounded-xl border border-red-300 bg-red-100 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50"
+                        onClick={() =>
+                          logoutPlayer(player.id, player.display_name)
+                        }
+                        disabled={isLoading}
+                      >
+                        Uitloggen
+                      </button>
                     </div>
                   ))}
                 </div>
